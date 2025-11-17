@@ -99,7 +99,12 @@ export const handler: Handler = async (event) => {
 
     // Generate AI image for illustration requests
     if (isAIImage) {
-      const completion = await groq.chat.completions.create({
+      let completion;
+      let retries = 2;
+      
+      while (retries >= 0) {
+        try {
+          completion = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [
           {
@@ -128,6 +133,18 @@ Return JSON:
         temperature: 0.8,
         response_format: { type: "json_object" }
       });
+          break; // Success
+        } catch (apiError) {
+          retries--;
+          console.error(`Visual API failed (image), retries left: ${retries}`, apiError);
+          if (retries < 0) throw apiError;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (!completion) {
+        throw new Error('Failed to generate image prompt after retries');
+      }
 
       const result = JSON.parse(completion.choices[0]?.message?.content || '{}');
       const imagePrompt = result.prompt || query;
@@ -145,7 +162,12 @@ Return JSON:
     }
     // Generate comparison chart for "X vs Y" queries
     else if (isComparison) {
-      const completion = await groq.chat.completions.create({
+      let completion;
+      let retries = 2;
+      
+      while (retries >= 0) {
+        try {
+          completion = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [
           {
@@ -203,6 +225,18 @@ Return ONLY valid JSON.`
         temperature: 0.7,
         response_format: { type: "json_object" }
       });
+          break; // Success
+        } catch (apiError) {
+          retries--;
+          console.error(`Visual API failed (comparison), retries left: ${retries}`, apiError);
+          if (retries < 0) throw apiError;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (!completion) {
+        throw new Error('Failed to generate comparison after retries');
+      }
 
       const result = JSON.parse(completion.choices[0]?.message?.content || '{}');
       
@@ -221,7 +255,12 @@ Return ONLY valid JSON.`
     }
     // Generate React Flow diagram for processes/flows/architectures (NO MORE MERMAID!)
     else if (isProcess || isStructure) {
-      const completion = await groq.chat.completions.create({
+      let completion;
+      let retries = 2;
+      
+      while (retries >= 0) {
+        try {
+          completion = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [
           {
@@ -300,6 +339,18 @@ Return ONLY valid JSON. No markdown.`
         temperature: 0.5,
         response_format: { type: "json_object" }
       });
+          break; // Success
+        } catch (apiError) {
+          retries--;
+          console.error(`Visual API failed (flowchart), retries left: ${retries}`, apiError);
+          if (retries < 0) throw apiError;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (!completion) {
+        throw new Error('Failed to generate flowchart after retries');
+      }
 
       const result = JSON.parse(completion.choices[0]?.message?.content || '{}');
       

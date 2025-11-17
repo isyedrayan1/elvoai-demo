@@ -81,13 +81,12 @@ export function ChatInterface({
     <div className={`flex flex-col h-full min-h-0 relative ${className}`}>
       {/* Messages Container - Ultra Responsive */}
       <div className="flex-1 overflow-y-auto overscroll-contain scroll-smooth">
-        <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 pb-4">
-          
-          {/* Welcome Screen - Modern Mobile-First Design */}
-          {displayWelcome && (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] sm:min-h-[70vh] py-6 sm:py-12 animate-in fade-in duration-500">
+        {/* Welcome Screen - Centered, No Scroll */}
+        {displayWelcome ? (
+          <div className="h-full flex flex-col items-center justify-center px-3 sm:px-4 md:px-6 animate-in fade-in duration-500">
+            <div className="w-full max-w-4xl mx-auto">
               {/* Hero Section */}
-              <div className="text-center space-y-3 sm:space-y-4 mb-8 sm:mb-12 px-4 max-w-2xl">
+              <div className="text-center space-y-3 sm:space-y-4 mb-8 sm:mb-12 px-4 max-w-2xl mx-auto">
                 <div className="inline-flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-primary via-primary to-primary/80 shadow-xl shadow-primary/25 mb-3 sm:mb-6 animate-in zoom-in duration-500">
                   <Sparkles className="w-7 h-7 sm:w-10 sm:h-10 text-primary-foreground" />
                 </div>
@@ -110,29 +109,26 @@ export function ChatInterface({
 
               {/* Quick Actions Grid - Responsive Card Design */}
               {quickActions.length > 0 && (
-                <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 px-4">
+                <div className="w-full max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 px-4">
                   {quickActions.map((action, index) => (
                     <button
                       key={index}
                       onClick={() => handleQuickAction(action.prompt)}
-                      className="group relative flex flex-col items-start gap-3 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm hover:bg-accent hover:border-primary/30 transition-all duration-200 text-left active:scale-[0.98] shadow-sm hover:shadow-lg hover:shadow-primary/5"
+                      className="group relative flex flex-col items-start gap-3 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors duration-200 text-left active:scale-[0.98]"
                       style={{ animationDelay: `${index * 100}ms` }}
                     >
-                      {/* Subtle gradient overlay on hover */}
-                      <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      
-                      <div className="relative flex items-center gap-3 w-full">
+                      <div className="flex items-center gap-3 w-full">
                         {action.icon && (
-                          <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-200 flex-shrink-0">
+                          <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
                             {action.icon}
                           </div>
                         )}
-                        <span className="font-semibold text-sm sm:text-base group-hover:text-foreground transition-colors">
+                        <span className="font-semibold text-sm sm:text-base">
                           {action.label}
                         </span>
                       </div>
                       {action.description && (
-                        <p className="relative text-xs sm:text-sm text-muted-foreground line-clamp-2 group-hover:text-muted-foreground/90">
+                        <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
                           {action.description}
                         </p>
                       )}
@@ -141,20 +137,29 @@ export function ChatInterface({
                 </div>
               )}
             </div>
-          )}
-
-          {/* Messages - Modern Chat Bubbles */}
-          {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`flex gap-3 sm:gap-4 animate-in slide-in-from-bottom-2 duration-300 ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              {/* Avatar - Assistant Only on Desktop */}
-              {message.role === "assistant" && !isMobile && (
+          </div>
+        ) : (
+          /* Chat Messages View */
+          <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 pb-4">
+            {/* Messages - Modern Chat Bubbles */}
+            {messages.map((message, index) => (
+              <div
+                key={index}
+                className={`flex gap-3 sm:gap-4 animate-in slide-in-from-bottom-2 duration-300 ${
+                  message.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+              {/* Avatar - Assistant Only (NOT when streaming/loading) */}
+              {message.role === "assistant" && !isMobile && !message.isStreaming && (
                 <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md">
                   <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
+                </div>
+              )}
+              
+              {/* Loading Spinner - When streaming */}
+              {message.role === "assistant" && !isMobile && message.isStreaming && (
+                <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-primary animate-spin" />
                 </div>
               )}
 
@@ -173,8 +178,46 @@ export function ChatInterface({
                   {message.hasVisual && message.visualData ? (
                     <VisualMessage visual={message.visualData} />
                   ) : (
-                    <div className="prose prose-sm sm:prose-base max-w-none prose-slate dark:prose-invert">
-                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    <div className="prose prose-sm sm:prose-base max-w-none prose-slate dark:prose-invert
+                      prose-headings:font-semibold prose-headings:tracking-tight
+                      prose-h1:text-2xl prose-h1:mb-4 prose-h1:mt-2
+                      prose-h2:text-xl prose-h2:mb-3 prose-h2:mt-4
+                      prose-h3:text-lg prose-h3:mb-2 prose-h3:mt-3
+                      prose-p:leading-relaxed prose-p:mb-4
+                      prose-ul:my-3 prose-ul:list-disc prose-ul:pl-6
+                      prose-ol:my-3 prose-ol:list-decimal prose-ol:pl-6
+                      prose-li:my-1.5 prose-li:leading-relaxed
+                      prose-strong:font-semibold prose-strong:text-foreground
+                      prose-em:italic prose-em:text-foreground/90
+                      prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:text-sm prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                      prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-lg prose-pre:p-4
+                      prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
+                      prose-a:text-primary prose-a:no-underline prose-a:font-medium hover:prose-a:underline
+                      [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      <ReactMarkdown
+                        components={{
+                          // Custom renderers for better formatting
+                          p: ({children}) => <p className="mb-3 last:mb-0">{children}</p>,
+                          ul: ({children}) => <ul className="space-y-1.5 my-3">{children}</ul>,
+                          ol: ({children}) => <ol className="space-y-1.5 my-3">{children}</ol>,
+                          li: ({children}) => <li className="leading-relaxed">{children}</li>,
+                          code: ({inline, children, ...props}: any) => 
+                            inline ? (
+                              <code className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono" {...props}>
+                                {children}
+                              </code>
+                            ) : (
+                              <code className="block" {...props}>{children}</code>
+                            ),
+                          h1: ({children}) => <h1 className="text-2xl font-semibold mb-4 mt-2">{children}</h1>,
+                          h2: ({children}) => <h2 className="text-xl font-semibold mb-3 mt-4">{children}</h2>,
+                          h3: ({children}) => <h3 className="text-lg font-semibold mb-2 mt-3">{children}</h3>,
+                          strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({children}) => <em className="italic text-foreground/90">{children}</em>,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                     </div>
                   )}
                 </div>
@@ -227,7 +270,8 @@ export function ChatInterface({
           )}
 
           <div ref={messagesEndRef} />
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Input Area - Fixed at Bottom with Minimal Padding */}

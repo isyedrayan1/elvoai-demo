@@ -15,7 +15,7 @@ interface RoadmapRequest {
 /**
  * Roadmap Generator - Creates structured learning paths with milestones
  * 
- * Uses Qwen-3-32B for deep reasoning about learning progression
+ * Uses llama-3.3-70b-versatile for deep reasoning about learning progression
  */
 export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -60,56 +60,77 @@ export const handler: Handler = async (event: HandlerEvent) => {
       messages: [
         {
           role: 'system',
-          content: `You are an expert learning path designer. Create comprehensive, structured roadmaps that:
+          content: `You are an expert learning path designer with 15+ years of experience in curriculum development. Create DEEP, COMPREHENSIVE roadmaps that:
 
-1. **Break down complex topics** into digestible milestones
-2. **Build progressively** - each step prepares for the next
-3. **Include practical projects** - learning by doing
-4. **Mix theory and practice** - 30% theory, 70% hands-on
+**CRITICAL REQUIREMENTS:**
+1. **Create AT LEAST 8-12 detailed milestones** (not just 4!)
+2. **Break down complex topics** into granular, digestible steps
+3. **Build progressively** - each milestone builds on the previous
+4. **Include practical projects** - 70% hands-on, 30% theory
 5. **Set realistic timelines** - based on ${timeframe} timeframe
-6. **Align with goals** - ${goals.length > 0 ? goals.join(', ') : 'general mastery'}
+6. **Align with goals** - ${goals.length > 0 ? goals.join(', ') : 'complete mastery'}
 
-For each milestone, provide:
-- Clear objective (what you'll learn)
-- Key concepts to master
-- Hands-on project or exercise
-- Success criteria (how you know you've learned it)
-- Estimated time
-- Prerequisites
+**Milestone Structure (REQUIRED for each):**
+- **Clear objective**: What specific skill/knowledge you'll gain
+- **Key concepts**: 3-5 core concepts to master
+- **Hands-on project**: Real-world application (be specific!)
+- **Success criteria**: 2-4 measurable outcomes
+- **Estimated hours**: Realistic time investment
+- **Prerequisites**: What you need before starting
+- **Resources needed**: Tools, libraries, frameworks
 
-Output as structured JSON following this schema:
+**Depth Guidelines by Level:**
+- **Beginner**: Start from absolute basics, explain everything, 10-15 milestones
+- **Intermediate**: Assume foundational knowledge, focus on practical skills, 8-12 milestones
+- **Advanced**: Deep dive into complex topics, optimization, best practices, 8-10 milestones
+
+**Output Format (STRICT JSON):**
 {
-  "title": "Learning Path Title",
-  "description": "Overview of what you'll achieve",
+  "title": "Comprehensive Learning Path Title",
+  "description": "Detailed overview of complete journey and outcomes",
   "level": "${userLevel}",
-  "totalDuration": "estimated total time",
+  "totalDuration": "realistic total time (e.g., '3 months at 10 hours/week')",
   "milestones": [
     {
       "id": 1,
-      "title": "Milestone name",
-      "objective": "What you'll learn",
-      "concepts": ["concept1", "concept2"],
-      "project": "Hands-on project description",
-      "successCriteria": ["criterion1", "criterion2"],
-      "estimatedHours": 10,
-      "prerequisites": []
+      "title": "Specific Milestone Name",
+      "objective": "Clear, measurable learning objective",
+      "concepts": ["concept1", "concept2", "concept3"],
+      "project": "Detailed hands-on project with specific deliverable",
+      "successCriteria": ["criterion1", "criterion2", "criterion3"],
+      "estimatedHours": 15,
+      "prerequisites": ["prerequisite if any"],
+      "duration": "1 week",
+      "completed": false,
+      "progress": 0,
+      "status": "not-started"
     }
+    // ... MINIMUM 8-12 milestones
   ],
-  "diagram": "mermaid flowchart syntax for visual roadmap"
-}`,
+  "diagram": "mermaid flowchart LR syntax showing learning progression"
+}
+
+**IMPORTANT**: Create a COMPLETE, PROFESSIONAL roadmap. This is a real learning journey!`,
         },
         {
           role: 'user',
-          content: `Create a ${userLevel} learning roadmap for: ${topic}
+          content: `Create a ${userLevel}-level learning roadmap for: ${topic}
 
-${goals.length > 0 ? `Goals: ${goals.join(', ')}` : ''}
+${goals.length > 0 ? `Specific Goals: ${goals.join(', ')}` : 'Goal: Complete mastery from ${userLevel} to expert'}
 Timeframe: ${timeframe}
 
-Generate a comprehensive, actionable roadmap.`,
+**REQUIREMENTS:**
+- Create AT LEAST 8-12 detailed, progressive milestones
+- Each milestone should be actionable and specific
+- Include real-world projects for each milestone
+- Make it comprehensive and professional-quality
+- Ensure logical progression from basics to advanced
+
+Generate the complete roadmap now.`,
         },
       ],
-      temperature: 0.7,
-      max_tokens: 4096,
+      temperature: 0.8, // Higher for more creative, detailed roadmaps
+      max_tokens: 8000, // Increased for comprehensive roadmaps
       response_format: { type: 'json_object' },
     });
 

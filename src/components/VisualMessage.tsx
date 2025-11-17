@@ -33,116 +33,51 @@ interface VisualMessageProps {
   visual: VisualData;
 }
 
-// Educational Context Display Component
+// Educational Context - Simple inline text like ChatGPT
 const EducationalContext = ({ visual }: { visual: VisualData }) => {
   if (!visual.learningObjective && !visual.prerequisites && !visual.keyTakeaways && 
-      !visual.commonMistakes && !visual.realWorldExample && !visual.practicePrompt &&
-      !visual.realWorldExamples && !visual.whenToUse) {
+      !visual.commonMistakes && !visual.realWorldExample && !visual.practicePrompt) {
     return null;
   }
 
   return (
-    <div className="mt-4 space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
+    <div className="mt-4 space-y-2 text-sm text-muted-foreground">
       {visual.learningObjective && (
-        <div className="flex gap-2 items-start p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-          <Target className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-1">Learning Objective</p>
-            <p className="text-sm text-blue-800 dark:text-blue-200">{visual.learningObjective}</p>
-          </div>
-        </div>
+        <p><strong className="text-foreground">🎯 Learning Objective:</strong> {visual.learningObjective}</p>
       )}
 
       {visual.prerequisites && (
-        <div className="flex gap-2 items-start p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
-          <BookOpen className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-purple-900 dark:text-purple-100 mb-1">Prerequisites</p>
-            <p className="text-sm text-purple-800 dark:text-purple-200">{visual.prerequisites}</p>
-          </div>
-        </div>
+        <p><strong className="text-foreground">📚 Prerequisites:</strong> {visual.prerequisites}</p>
       )}
 
       {visual.keyTakeaways && visual.keyTakeaways.length > 0 && (
-        <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
-          <div className="flex items-center gap-2 mb-2">
-            <Lightbulb className="w-4 h-4 text-green-600 dark:text-green-400" />
-            <p className="text-xs font-semibold text-green-900 dark:text-green-100">Key Takeaways</p>
-          </div>
-          <ul className="space-y-1 ml-6">
+        <div>
+          <p className="font-semibold text-foreground mb-1">💡 Key Takeaways:</p>
+          <ul className="list-disc list-inside space-y-0.5 ml-2">
             {visual.keyTakeaways.map((takeaway, i) => (
-              <li key={i} className="text-sm text-green-800 dark:text-green-200 list-disc">{takeaway}</li>
+              <li key={i}>{takeaway}</li>
             ))}
           </ul>
         </div>
       )}
 
       {visual.commonMistakes && visual.commonMistakes.length > 0 && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">Common Mistakes</p>
-          </div>
-          <ul className="space-y-1 ml-6">
+        <div>
+          <p className="font-semibold text-foreground mb-1">⚠️ Common Mistakes:</p>
+          <ul className="list-disc list-inside space-y-0.5 ml-2">
             {visual.commonMistakes.map((mistake, i) => (
-              <li key={i} className="text-sm text-amber-800 dark:text-amber-200 list-disc">{mistake}</li>
+              <li key={i}>{mistake}</li>
             ))}
           </ul>
         </div>
       )}
 
       {visual.realWorldExample && (
-        <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100">Real-World Example</p>
-          </div>
-          <p className="text-sm text-indigo-800 dark:text-indigo-200 ml-6">{visual.realWorldExample}</p>
-        </div>
-      )}
-
-      {visual.realWorldExamples && (visual.realWorldExamples.item1Name || visual.realWorldExamples.item2Name) && (
-        <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100">Real-World Examples</p>
-          </div>
-          <div className="space-y-2 ml-6">
-            {visual.realWorldExamples.item1Name && (
-              <p className="text-sm text-indigo-800 dark:text-indigo-200">• {visual.realWorldExamples.item1Name}</p>
-            )}
-            {visual.realWorldExamples.item2Name && (
-              <p className="text-sm text-indigo-800 dark:text-indigo-200">• {visual.realWorldExamples.item2Name}</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {visual.whenToUse && (visual.whenToUse.item1Name || visual.whenToUse.item2Name) && (
-        <div className="p-3 bg-teal-50 dark:bg-teal-950/30 rounded-lg border border-teal-200 dark:border-teal-800">
-          <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            <p className="text-xs font-semibold text-teal-900 dark:text-teal-100">When to Use</p>
-          </div>
-          <div className="space-y-2 ml-6">
-            {visual.whenToUse.item1Name && (
-              <p className="text-sm text-teal-800 dark:text-teal-200">• {visual.whenToUse.item1Name}</p>
-            )}
-            {visual.whenToUse.item2Name && (
-              <p className="text-sm text-teal-800 dark:text-teal-200">• {visual.whenToUse.item2Name}</p>
-            )}
-          </div>
-        </div>
+        <p><strong className="text-foreground">✨ Real-World Example:</strong> {visual.realWorldExample}</p>
       )}
 
       {visual.practicePrompt && (
-        <div className="p-4 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-950/30 dark:to-rose-950/30 rounded-lg border-2 border-pink-300 dark:border-pink-700">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-5 h-5 text-pink-600 dark:text-pink-400" />
-            <p className="text-sm font-bold text-pink-900 dark:text-pink-100">Try This Next!</p>
-          </div>
-          <p className="text-sm text-pink-800 dark:text-pink-200 ml-7">{visual.practicePrompt}</p>
-        </div>
+        <p><strong className="text-foreground">🚀 Try This:</strong> {visual.practicePrompt}</p>
       )}
     </div>
   );

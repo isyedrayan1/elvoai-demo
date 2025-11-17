@@ -97,14 +97,27 @@ Context awareness:
 
 Intent Categories:
 1. **casual_chat**: General questions, quick facts, simple explanations
-2. **project_creation**: User wants structured learning path (keywords: "learn", "master", "become", "career", "project")
-3. **roadmap_request**: User wants step-by-step learning plan (keywords: "roadmap", "steps", "path", "guide", "how do I learn")
+2. **project_creation**: User wants structured learning path (keywords: "learn", "master", "become", "career", "project", "roadmap", "guide me", "teach me", "start learning")
+3. **roadmap_request**: User explicitly asks for roadmap/learning plan (same as project_creation)
 4. **resource_search**: User needs courses, tutorials, articles (keywords: "recommend", "resources", "courses", "tutorials")
 5. **deep_learning**: User wants comprehensive understanding (keywords: "explain deeply", "understand", "how does", "why")
 6. **explanation**: User wants concept explained simply (keywords: "what is", "explain", "ELI5")
-7. **visual_explanation**: User wants diagrams, flowcharts, mind maps (keywords: "show diagram", "flowchart", "visualize structure", "architecture")
-8. **comparison**: User wants to compare concepts with charts (keywords: "difference", "compare", "vs", "versus", "over")
-9. **image_generation**: User wants AI-generated images/illustrations (keywords: "generate image", "create picture", "draw", "illustrate", "show me visually")
+7. **visual_explanation**: User wants diagrams, flowcharts, mind maps (keywords: "show diagram", "flowchart", "visualize", "visual structure", "architecture diagram", "how it works visually", "show me a diagram", "draw a diagram", "create a flowchart", "show me how", "diagram of")
+8. **comparison**: User wants to compare concepts with charts (keywords: "difference between", "compare", "vs", "versus", "A or B", "which is better", "what's the difference", "how do they differ", "X versus Y", "X or Y")
+9. **image_generation**: User wants AI-generated images/illustrations (keywords: "generate image", "create picture", "draw", "illustrate concept", "show me a visual", "make an image", "design an illustration")
+
+**IMPORTANT**: 
+- Treat project_creation and roadmap_request as the SAME intent - both should create a learning project immediately.
+- Be SMART about visual detection - if user asks "how does X work", consider visual_explanation
+- For "difference between X and Y", always choose comparison over casual_chat
+
+Examples of project_creation intent:
+- "I want to learn Python"
+- "Help me become a web developer"
+- "Create a roadmap for machine learning"
+- "I want to master React"
+- "Guide me through learning data science"
+- "Teach me how to code"
 
 Return your analysis as a structured decision.`,
         },
@@ -161,7 +174,24 @@ Return your analysis as a structured decision.`,
     }
 
     if (!completion) {
-      throw new Error(`Orchestration failed after retries: ${lastError instanceof Error ? lastError.message : 'Unknown'}`);
+      console.error('Orchestration failed after all retries:', lastError);
+      // Return intelligent fallback instead of throwing
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        } as Record<string, string>,
+        body: JSON.stringify({
+          intent: 'casual_chat',
+          confidence: 0.3,
+          suggestedAction: {
+            type: 'respond',
+          },
+          reasoning: 'Intent detection temporarily unavailable, defaulting to chat mode',
+          fallback: true
+        }),
+      };
     }
 
     const functionCall = completion.choices[0]?.message?.function_call;
@@ -185,6 +215,13 @@ Return your analysis as a structured decision.`,
     }
 
     const intentData = JSON.parse(functionCall.arguments);
+    
+    // Validate confidence threshold - if too low, default to casual chat
+    if (intentData.confidence < 0.4) {
+      console.log(`Low confidence (${intentData.confidence}), defaulting to casual chat`);
+      intentData.intent = 'casual_chat';
+      intentData.suggestedAction = { type: 'respond' };
+    }
 
     // Map intent to action
     const actionMap: Record<string, OrchestrationResponse['suggestedAction']> = {
@@ -194,12 +231,14 @@ Return your analysis as a structured decision.`,
         parameters: {
           title: intentData.suggestedProjectTitle || intentData.extractedTopic,
           topic: intentData.extractedTopic,
+          extractedTopic: intentData.extractedTopic,
         },
       },
       roadmap_request: {
-        type: 'generate_roadmap',
+        type: 'create_project', // Changed from 'generate_roadmap' to match project_creation
         parameters: {
           topic: intentData.extractedTopic,
+          extractedTopic: intentData.extractedTopic,
         },
       },
       resource_search: {

@@ -6,9 +6,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit2, Check, X, Target, Lightbulb, Rocket, Brain, BookOpen, Sparkles } from "lucide-react";
 import { ChatInterface, type ChatMessage } from "@/components/ChatInterface";
-import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import type { VisualData } from "@/lib/api";
 import { db, type Chat as DBChat, type Message as DBMessage } from "@/lib/db";
+import { contextManager } from "@/lib/context";
 
 // Extend Message type for UI-specific properties
 interface Message extends Omit<DBMessage, 'role' | 'timestamp'> {
@@ -72,7 +72,6 @@ const AskMindCoach = () => {
   const [currentTitle, setCurrentTitle] = useState<string>("New Chat");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
-  const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   // Check for create_project intent on mount
@@ -252,94 +251,239 @@ const AskMindCoach = () => {
           };
           return updated;
         });
-      } else if (actionType === 'create_project') {
-        // Have consultative conversation before showing button
-        const systemMessage = {
-          role: "system",
-          content: `You are MindCoach, an AI learning consultant. The user has expressed interest in learning something new.
-
-Your goal is to have a CONSULTATIVE conversation to understand their needs. DO NOT immediately suggest creating a project.
-
-Conversation Flow:
-1. Ask about what they want to learn (if not clear)
-2. Ask about their current level and experience
-3. Ask about their learning goals and motivation
-4. Ask about time commitment
-
-ONLY after gathering ALL this information through 3-4 conversational exchanges, you can suggest creating a roadmap:
-
-"Great! Based on our conversation, I can create a personalized learning roadmap for you! 🚀"
-
-Then add this EXACT tag:
-[CREATE_JOURNEY]
-
-This will show a button for them to start the project creation process.`
-        };
-
-        const chatMessages = [
-          systemMessage,
-          ...messages
-            .filter(m => m.content && m.isStreaming === undefined)
-            .map(m => ({
-              role: m.role,
-              content: m.content
-            })),
-          {
-            role: userMessage.role,
-            content: userMessage.content
-          }
-        ];
-
-        const chatResponse = await fetch('/.netlify/functions/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: chatMessages,
-            stream: false
-          })
-        });
+      } else if (actionType === 'create_project' || actionType === 'generate_roadmap') {
+        // Analyze conversation context to decide: direct creation or consultation
+        const topic = orchestration.suggestedAction?.parameters?.extractedTopic || userMessageContent;
+        const hasEnoughInfo = orchestration.confidence > 0.8 && orchestration.suggestedAction?.parameters?.extractedTopic;
         
-        if (!chatResponse.ok) {
-          throw new Error(`Chat failed: ${chatResponse.status}`);
-        }
+        // Check conversation history for user details
+        const conversationContext = messages
+          .filter(m => m.role === 'user')
+          .map(m => m.content)
+          .join(' ');
         
-        const chatResult = await chatResponse.json();
+        // Intelligent detection: does user message contain enough details?
+        const mentionsLevel = /\b(beginner|intermediate|advanced|new to|experienced|expert)\b/i.test(userMessageContent + ' ' + conversationContext);
+        const mentionsGoal = /\b(want to|goal|build|create|become|career|job|project)\b/i.test(userMessageContent);
+        const isDirectRequest = /\b(create|make|build|generate) (a |me )?(roadmap|plan|path|guide|project)\b/i.test(userMessageContent);
         
-        // Check if AI is ready to show create button
-        const shouldShowButton = chatResult.response.includes('[CREATE_JOURNEY]');
-        const cleanResponse = chatResult.response.replace(/\[CREATE_JOURNEY\]/g, '').trim();
-        
-        setMessages(prev => {
-          const updated = [...prev];
-          const lastIndex = updated.length - 1;
-          updated[lastIndex] = {
+        // Create project function that will be called on button click
+        const handleCreateProject = async () => {
+          // Find the message with the button and update it to show loading
+          setMessages(prev => {
+            const updated = [...prev];
+            const buttonMessageIndex = updated.findIndex(m => m.actionButton);
+            if (buttonMessageIndex >= 0) {
+              updated[buttonMessageIndex] = {
+                ...updated[buttonMessageIndex],
+                actionButton: undefined
+              };
+            }
+            return updated;
+          });
+          
+          // Add loading message
+          setMessages(prev => [...prev, {
             role: "assistant",
-            content: cleanResponse,
-            ...(shouldShowButton && {
+            content: `Creating your personalized learning roadmap for **${topic}**... 🚀`,
+            isStreaming: true
+          }]);
+          
+          try {
+            // Generate roadmap
+            const roadmapResponse = await fetch('/.netlify/functions/generate-roadmap', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic: topic,
+                userLevel: orchestration.suggestedAction?.parameters?.level || 'beginner',
+                timeframe: 'month',
+                goals: []
+              })
+            });
+
+            if (!roadmapResponse.ok) {
+              throw new Error(`Roadmap generation failed: ${roadmapResponse.status}`);
+            }
+
+            const roadmapData = await roadmapResponse.json();
+
+            // Gather resources
+            const resourcesResponse = await fetch('/.netlify/functions/gather-resources', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic: topic,
+                level: orchestration.suggestedAction?.parameters?.level || 'beginner'
+              })
+            });
+
+            const resourcesData = resourcesResponse.ok ? await resourcesResponse.json() : { resources: [] };
+
+            // Create project with roadmap and resources
+            const newProject = db.createProject({
+              title: roadmapData.roadmap.title || `Learn ${topic}`,
+              description: roadmapData.roadmap.description || `A comprehensive learning path for ${topic}`,
+              level: roadmapData.roadmap.level || 'beginner',
+              roadmap: roadmapData.roadmap,
+              resources: resourcesData.resources || [],
+              chats: []
+            });
+
+            // Update loading message with success
+            setMessages(prev => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              updated[lastIndex] = {
+                role: "assistant",
+                content: `✨ **Your learning journey is ready!**\n\nI've created a personalized roadmap for **${roadmapData.roadmap.title}** with:\n\n📚 **${roadmapData.roadmap.milestones?.length || 0} Learning Milestones**\n🔗 **${resourcesData.resources?.length || 0} Curated Resources**\n🎯 **Estimated Duration:** ${roadmapData.roadmap.totalDuration}\n\nClick below to start your journey!`,
+                actionButton: {
+                  label: "Open Project",
+                  icon: <Rocket className="h-4 w-4" />,
+                  onClick: () => navigate(`/projects/${newProject.id}`)
+                }
+              };
+              return updated;
+            });
+          } catch (error) {
+            console.error('Failed to create project:', error);
+            setMessages(prev => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              updated[lastIndex] = {
+                role: "assistant",
+                content: `I encountered an error creating your learning roadmap. Please try again.`
+              };
+              return updated;
+            });
+          }
+        };
+        
+        // DYNAMIC DECISION: Skip consultation if user gives clear, direct request with details
+        if ((hasEnoughInfo && (mentionsLevel || mentionsGoal)) || isDirectRequest) {
+          // DIRECT PROJECT CREATION - User gave enough info
+          const cleanResponse = `Perfect! I'll create a comprehensive learning roadmap for **${topic}** right away! 🚀`;
+          
+          setMessages(prev => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            updated[lastIndex] = {
+              role: "assistant",
+              content: cleanResponse,
               actionButton: {
                 label: "Create Learning Journey",
                 icon: <Sparkles className="h-4 w-4" />,
-                onClick: () => setShowProjectDialog(true)
+                onClick: handleCreateProject
               }
-            })
+            };
+            return updated;
+          });
+        } else {
+          // CONSULTATIVE MODE - Need more info
+          const systemMessage = {
+            role: "system",
+            content: `You are MindCoach, an expert learning consultant. The user wants to learn something new.
+
+**DYNAMIC CONSULTATION MODE:**
+Analyze what information you already know from the conversation, then ask ONLY for missing details.
+
+**Information to gather:**
+1. Topic (what to learn) - ${topic ? '✓ Known: ' + topic : '✗ Ask this'}
+2. Current level (beginner/intermediate/advanced) - ${mentionsLevel ? '✓ Detected' : '✗ Ask this'}
+3. Learning goals (career/project/hobby) - ${mentionsGoal ? '✓ Detected' : '✗ Ask this'}
+4. Time commitment (hours per week)
+5. Learning style (hands-on/theory/balanced)
+
+**RULES:**
+- Ask ONLY ONE question at a time
+- Skip questions for info you already know
+- Be conversational and encouraging
+- When you have AT LEAST topic + level + goal (3 items), you can offer to create the roadmap
+
+**When ready**, respond with:
+"Perfect! I can create your personalized learning roadmap for [topic] now!"
+
+Then add: [CREATE_ROADMAP]`
           };
-          return updated;
-        });
+          
+          const chatResponse = await fetch('/.netlify/functions/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+                systemMessage,
+                ...messages
+                  .filter(m => m.content && m.isStreaming === undefined)
+                  .map(m => ({
+                    role: m.role,
+                    content: m.content
+                  })),
+                {
+                  role: userMessage.role,
+                  content: userMessage.content
+                }
+              ],
+              stream: false
+            })
+          });
+          
+          if (!chatResponse.ok) {
+            throw new Error(`Chat failed: ${chatResponse.status}`);
+          }
+          
+          const chatResult = await chatResponse.json();
+          const shouldShowButton = chatResult.response.includes('[CREATE_ROADMAP]');
+          const cleanResponse = chatResult.response.replace(/\[CREATE_ROADMAP\]/g, '').trim();
+          
+          setMessages(prev => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            updated[lastIndex] = {
+              role: "assistant",
+              content: cleanResponse,
+              ...(shouldShowButton && {
+                actionButton: {
+                  label: "Create Learning Journey",
+                  icon: <Sparkles className="h-4 w-4" />,
+                  onClick: handleCreateProject
+                }
+              })
+            };
+            return updated;
+          });
+        }
         
       } else {
-        // Regular chat response
+        // Regular chat response - FULLY CONTEXT-AWARE
+        
+        // Build context from current chat
+        const chatContext = contextManager.buildGeneralChatContext(currentChatId !== 'new' ? currentChatId : undefined);
+        
+        // Prepare full conversation history for context awareness
+        const conversationHistory = [...messages, userMessage]
+          .filter(m => m.content && !m.isStreaming)
+          .map(m => ({
+            role: m.role,
+            content: m.content
+          }));
+        
         const chatResponse = await fetch('/.netlify/functions/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: [...messages, userMessage]
-              .filter(m => m.content && m.isStreaming === undefined)
-              .map(m => ({
-                role: m.role,
-                content: m.content
-              })),
+            messages: conversationHistory,
             useReasoning: orchestration.suggestedAction?.parameters?.useReasoning || false,
-            stream: false
+            stream: false,
+            // Pass context for context-aware responses
+            context: {
+              chatId: chatContext.chatId,
+              lastTopic: chatContext.lastTopic,
+              recentMessages: chatContext.recentMessages,
+              conversationLength: conversationHistory.length,
+              // Enable web-aware, dynamic responses
+              enableWebSearch: true,
+              enableVisuals: true
+            }
           })
         });
         
@@ -349,25 +493,34 @@ This will show a button for them to start the project creation process.`
         
         const chatResult = await chatResponse.json();
         
+        // Update message with response and clear streaming state
         setMessages(prev => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
           updated[lastIndex] = {
             role: "assistant",
-            content: chatResult.response || "No response received"
+            content: chatResult.response || "No response received",
+            isStreaming: false, // Clear streaming state
+            timestamp: new Date().toISOString()
           };
           return updated;
         });
       }
     } catch (error) {
       console.error('Failed to get AI response:', error);
+      
+      // Clear streaming state and show error
       setMessages(prev => {
         const updated = [...prev];
         const lastIndex = updated.length - 1;
-        updated[lastIndex] = {
-          role: "assistant",
-          content: `I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
-        };
+        if (updated[lastIndex] && updated[lastIndex].isStreaming) {
+          updated[lastIndex] = {
+            role: "assistant",
+            content: `I encountered an error. Please try again.`,
+            isStreaming: false,
+            timestamp: new Date().toISOString()
+          };
+        }
         return updated;
       });
     } finally {
@@ -432,12 +585,6 @@ This will show a button for them to start the project creation process.`
         showWelcome={true}
         welcomeMessage={WELCOME_MESSAGE}
         quickActions={QUICK_ACTIONS}
-      />
-
-      {/* Conversational Project Creation Dialog */}
-      <CreateProjectDialog
-        open={showProjectDialog}
-        onOpenChange={setShowProjectDialog}
       />
     </div>
   );
