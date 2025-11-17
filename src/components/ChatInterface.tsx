@@ -1,0 +1,250 @@
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Sparkles, Loader2, User, Bot } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import RuixenQueryBox from "@/components/ui/ruixen-query-box";
+import { VisualMessage } from "@/components/VisualMessage";
+import type { VisualData } from "@/lib/api";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+  isStreaming?: boolean;
+  hasVisual?: boolean;
+  visualData?: VisualData;
+  actionButton?: {
+    label: string;
+    icon?: React.ReactNode;
+    onClick: () => void;
+  };
+}
+
+interface QuickAction {
+  label: string;
+  prompt: string;
+  icon?: React.ReactNode;
+  description?: string;
+}
+
+interface ChatInterfaceProps {
+  messages: ChatMessage[];
+  onSendMessage: (message: string) => Promise<void>;
+  isLoading?: boolean;
+  placeholder?: string;
+  showWelcome?: boolean;
+  welcomeMessage?: string;
+  quickActions?: QuickAction[];
+  className?: string;
+  respectSidebar?: boolean;
+}
+
+export function ChatInterface({
+  messages,
+  onSendMessage,
+  isLoading = false,
+  placeholder = "Ask me anything...",
+  showWelcome = false,
+  welcomeMessage,
+  quickActions = [],
+  className = "",
+  respectSidebar = true,
+}: ChatInterfaceProps) {
+  const [input, setInput] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSubmit = async (message: string) => {
+    if (!message.trim() || isLoading) return;
+    setInput("");
+    await onSendMessage(message.trim());
+  };
+
+  const handleQuickAction = async (prompt: string) => {
+    setInput(prompt);
+    await onSendMessage(prompt);
+  };
+
+  const hasUserMessages = messages.some(m => m.role === "user");
+  const displayWelcome = showWelcome && !hasUserMessages;
+
+  return (
+    <div className={`flex flex-col h-full min-h-0 relative ${className}`}>
+      {/* Messages Container - Ultra Responsive */}
+      <div className="flex-1 overflow-y-auto overscroll-contain scroll-smooth">
+        <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 pb-4">
+          
+          {/* Welcome Screen - Modern Mobile-First Design */}
+          {displayWelcome && (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] sm:min-h-[70vh] py-6 sm:py-12 animate-in fade-in duration-500">
+              {/* Hero Section */}
+              <div className="text-center space-y-3 sm:space-y-4 mb-8 sm:mb-12 px-4 max-w-2xl">
+                <div className="inline-flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-primary via-primary to-primary/80 shadow-xl shadow-primary/25 mb-3 sm:mb-6 animate-in zoom-in duration-500">
+                  <Sparkles className="w-7 h-7 sm:w-10 sm:h-10 text-primary-foreground" />
+                </div>
+                
+                {welcomeMessage ? (
+                  <div className="prose prose-sm sm:prose-base md:prose-lg prose-slate dark:prose-invert max-w-none">
+                    <ReactMarkdown>{welcomeMessage}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <>
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                      Welcome to MindCoach
+                    </h1>
+                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-md mx-auto">
+                      Your AI learning companion for deep understanding and personalized growth
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {/* Quick Actions Grid - Responsive Card Design */}
+              {quickActions.length > 0 && (
+                <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 px-4">
+                  {quickActions.map((action, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleQuickAction(action.prompt)}
+                      className="group relative flex flex-col items-start gap-3 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm hover:bg-accent hover:border-primary/30 transition-all duration-200 text-left active:scale-[0.98] shadow-sm hover:shadow-lg hover:shadow-primary/5"
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
+                      {/* Subtle gradient overlay on hover */}
+                      <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      
+                      <div className="relative flex items-center gap-3 w-full">
+                        {action.icon && (
+                          <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-200 flex-shrink-0">
+                            {action.icon}
+                          </div>
+                        )}
+                        <span className="font-semibold text-sm sm:text-base group-hover:text-foreground transition-colors">
+                          {action.label}
+                        </span>
+                      </div>
+                      {action.description && (
+                        <p className="relative text-xs sm:text-sm text-muted-foreground line-clamp-2 group-hover:text-muted-foreground/90">
+                          {action.description}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Messages - Modern Chat Bubbles */}
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`flex gap-3 sm:gap-4 animate-in slide-in-from-bottom-2 duration-300 ${
+                message.role === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
+              {/* Avatar - Assistant Only on Desktop */}
+              {message.role === "assistant" && !isMobile && (
+                <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md">
+                  <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
+                </div>
+              )}
+
+              {/* Message Content */}
+              <div className={`flex flex-col gap-2 max-w-[85%] sm:max-w-[75%] md:max-w-[70%] ${
+                message.role === "user" ? "items-end" : "items-start"
+              }`}>
+                {/* Message Bubble */}
+                <div
+                  className={`px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl sm:rounded-3xl shadow-sm ${
+                    message.role === "user"
+                      ? "bg-muted border border-border/50 text-foreground rounded-tr-md"
+                      : "bg-muted/50 backdrop-blur-sm border border-border/50 text-foreground rounded-tl-md"
+                  }`}
+                >
+                  {message.hasVisual && message.visualData ? (
+                    <VisualMessage visual={message.visualData} />
+                  ) : (
+                    <div className="prose prose-sm sm:prose-base max-w-none prose-slate dark:prose-invert">
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Button */}
+                {message.actionButton && (
+                  <Button
+                    onClick={message.actionButton.onClick}
+                    size={isMobile ? "sm" : "default"}
+                    className="rounded-full shadow-md hover:shadow-lg transition-all"
+                  >
+                    {message.actionButton.icon}
+                    <span className="ml-2">{message.actionButton.label}</span>
+                  </Button>
+                )}
+
+                {/* Timestamp - Subtle */}
+                {message.timestamp && (
+                  <span className="text-[10px] sm:text-xs text-muted-foreground/60 px-2">
+                    {new Date(message.timestamp).toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </span>
+                )}
+              </div>
+
+              {/* Avatar - User Only on Desktop */}
+              {message.role === "user" && !isMobile && (
+                <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border-2 border-primary/20">
+                  <User className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Loading Indicator - Modern Pulse */}
+          {isLoading && (
+            <div className="flex gap-3 sm:gap-4 items-start animate-in fade-in duration-300">
+              <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md animate-pulse">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
+              </div>
+              <div className="px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl sm:rounded-3xl bg-muted/50 backdrop-blur-sm border border-border/50 rounded-tl-md">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input Area - Fixed at Bottom with Minimal Padding */}
+      <div className="flex-shrink-0 w-full bg-background border-t border-border/50">
+        <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-2">
+          <div className="relative">
+            <RuixenQueryBox
+              value={input}
+              onChange={setInput}
+              onSend={handleSubmit}
+              placeholder={placeholder}
+              disabled={isLoading}
+              className="shadow-xl shadow-black/5 border-border/50"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
