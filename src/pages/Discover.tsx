@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { TrendingUp, Wrench, BookOpen, Search, ExternalLink, Sparkles, Loader2 } from "lucide-react";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { TrendingUp, Target, Wrench, Zap, Star, Search, ExternalLink, Sparkles, Loader2, BookmarkPlus, Bookmark, X, RefreshCw } from "lucide-react";
+import { db } from "@/lib/db";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 interface FeedItem {
   id: string;
@@ -31,28 +34,117 @@ interface ExaResult {
 }
 
 const Discover = () => {
-  const [activeTab, setActiveTab] = useState("trending");
+  const [activeTab, setActiveTab] = useState("next-skills");
   const [searchQuery, setSearchQuery] = useState("");
   const [exaQuery, setExaQuery] = useState("");
+  const [userProjects, setUserProjects] = useState<any[]>([]);
+  const [bookmarks, setBookmarks] = useState<FeedItem[]>([]);
+  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-  // Fetch RSS feed data
-  const { data: feedData, isLoading: feedLoading } = useQuery<{ items: FeedItem[]; total: number }>({
-    queryKey: ['discover-feed', activeTab],
+  // Fetch user's projects for context and load bookmarks
+  useEffect(() => {
+    const projects = db.getProjects();
+    setUserProjects(projects || []);
+    
+    // Load bookmarks from localStorage
+    const savedBookmarks = localStorage.getItem('elvo-bookmarks');
+    if (savedBookmarks) {
+      setBookmarks(JSON.parse(savedBookmarks));
+    }
+  }, []);
+
+  // Fetch content using Exa.ai based on user context
+  const { data: feedData, isLoading: feedLoading, refetch: refetchFeed } = useQuery<{ items: FeedItem[]; total: number }>({
+    queryKey: ['discover-feed', activeTab, userProjects.map(p => p.id)],
     queryFn: async () => {
-      const category = activeTab === 'trending' ? 'all' : activeTab;
-      const response = await fetch(`/api/discover?category=${category}&limit=20`);
-      if (!response.ok) throw new Error('Failed to fetch feed');
-      return response.json();
+      // Build search query based on user's projects and active tab
+      const userTopics = userProjects.map(p => p.title || p.description).join(', ');
+      
+      const queryMap: Record<string, string> = {
+        'next-skills': userTopics ? `advanced tutorials and courses for ${userTopics}` : 'trending programming tutorials and web development courses',
+        'trending': userTopics ? `latest news and trends in ${userTopics}` : 'latest tech news and software development trends',
+        'tools': userTopics ? `best developer tools and libraries for ${userTopics}` : 'best developer tools frameworks and libraries',
+        'quick-wins': userTopics ? `quick tips and tricks for ${userTopics}` : 'programming tips tricks and productivity hacks',
+        'success': userTopics ? `success stories and case studies in ${userTopics}` : 'tech success stories and developer achievements'
+      };
+      
+      const searchQuery = queryMap[activeTab] || 'software development and programming';
+      
+      const response = await fetch('/.netlify/functions/exa-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: searchQuery,
+          type: 'auto',
+          numResults: 12,
+          useAutoprompt: true,
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch content');
+      const data = await response.json();
+      
+      // Helper function to clean description text
+      const cleanDescription = (text: string) => {
+        if (!text) return '';
+        
+        // Remove code blocks and snippets
+        let cleaned = text.replace(/```[\s\S]*?```/g, '');
+        cleaned = cleaned.replace(/`[^`]+`/g, '');
+        
+        // Remove URLs
+        cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, '');
+        
+        // Remove special characters and excessive whitespace
+        cleaned = cleaned.replace(/[#*_\[\](){}]/g, '');
+        cleaned = cleaned.replace(/\s+/g, ' ');
+        
+        // Take first 150 characters and ensure it ends at a word
+        if (cleaned.length > 150) {
+          cleaned = cleaned.substring(0, 150);
+          const lastSpace = cleaned.lastIndexOf(' ');
+          if (lastSpace > 100) {
+            cleaned = cleaned.substring(0, lastSpace) + '...';
+          } else {
+            cleaned = cleaned + '...';
+          }
+        }
+        
+        return cleaned.trim();
+      };
+      
+      // Transform Exa results to FeedItem format
+      const items = data.results.map((result: ExaResult, index: number) => ({
+        id: result.id || `item-${index}`,
+        title: result.title,
+        description: cleanDescription(result.text || result.summary || ''),
+        url: result.url,
+        source: new URL(result.url).hostname.replace('www.', ''),
+        category: activeTab.replace('-', ' ').split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        published_at: result.publishedDate || new Date().toISOString()
+      }));
+      
+      return { items, total: items.length };
     },
     enabled: activeTab !== 'search',
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 300000, // Refresh every 5 min
   });
+
+  // Refresh feed when projects change
+  useEffect(() => {
+    if (userProjects.length > 0 && activeTab !== 'search') {
+      refetchFeed();
+    }
+  }, [userProjects.length]);
 
   // Exa semantic search
   const { data: exaData, isLoading: exaLoading, refetch: searchExa } = useQuery<{ results: ExaResult[]; total: number }>({
     queryKey: ['exa-search', exaQuery],
     queryFn: async () => {
-      const response = await fetch('/api/exa-search', {
+      const response = await fetch('/.netlify/functions/exa-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,6 +165,123 @@ const Discover = () => {
       setExaQuery(searchQuery);
       setActiveTab('search');
       searchExa();
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refetchFeed();
+    setTimeout(() => setIsRefreshing(false), 300);
+  };
+
+  const handleBookmark = (item: FeedItem) => {
+    const isBookmarked = bookmarks.some(b => b.id === item.id);
+    
+    if (isBookmarked) {
+      const newBookmarks = bookmarks.filter(b => b.id !== item.id);
+      setBookmarks(newBookmarks);
+      localStorage.setItem('elvo-bookmarks', JSON.stringify(newBookmarks));
+      toast({
+        title: "Removed from bookmarks",
+        description: `"${item.title}" has been removed.`,
+      });
+    } else {
+      const newBookmarks = [...bookmarks, item];
+      setBookmarks(newBookmarks);
+      localStorage.setItem('elvo-bookmarks', JSON.stringify(newBookmarks));
+      toast({
+        title: "📌 Bookmarked!",
+        description: `"${item.title}" saved for later.`,
+      });
+    }
+  };
+
+  const isBookmarked = (itemId: string) => {
+    return bookmarks.some(b => b.id === itemId);
+  };
+
+  const handleAddToPath = async (item: FeedItem) => {
+    toast({
+      title: "Creating learning path...",
+      description: "Generating roadmap and resources",
+    });
+
+    try {
+      // Create project with basic info first
+      const projectId = `project-${Date.now()}`;
+      const tempProject = {
+        id: projectId,
+        title: item.title,
+        description: item.description,
+        level: 'intermediate' as const,
+        resources: [{
+          id: '1',
+          title: item.title,
+          url: item.url,
+          type: 'article' as const,
+          level: 'intermediate' as const,
+          quality: 5,
+          description: item.description,
+          topics: [item.category],
+          estimatedTime: '15 min',
+          isPaid: false,
+          addedBy: 'user' as const,
+          addedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        }],
+        chats: [],
+        progress: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      db.saveProject(tempProject);
+      setUserProjects(db.getProjects());
+
+      // Generate detailed roadmap in background
+      const roadmapResponse = await fetch('/.netlify/functions/generate-roadmap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: item.title,
+          level: 'intermediate',
+          description: item.description
+        })
+      });
+
+      if (roadmapResponse.ok) {
+        const { roadmap } = await roadmapResponse.json();
+        
+        // Update project with roadmap
+        const updatedProject = {
+          ...tempProject,
+          roadmap,
+          updatedAt: new Date().toISOString()
+        };
+        
+        db.saveProject(updatedProject);
+        setUserProjects(db.getProjects());
+
+        toast({
+          title: "✨ Learning path created!",
+          description: `"${item.title}" with full roadmap added to Projects`,
+          action: (
+            <Button size="sm" onClick={() => navigate('/projects')}>
+              View
+            </Button>
+          )
+        });
+      } else {
+        toast({
+          title: "✅ Project created!",
+          description: `"${item.title}" added. Roadmap generation in progress...`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "✅ Project created!",
+        description: `"${item.title}" added to your projects.`,
+      });
     }
   };
 
@@ -103,12 +312,94 @@ const Discover = () => {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Discover</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Real-time industry insights powered by AI</p>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            {userProjects.length > 0 
+              ? `Personalized for your ${userProjects.length} learning project${userProjects.length > 1 ? 's' : ''}`
+              : 'Real-time industry insights powered by AI'
+            }
+          </p>
         </div>
-        <Badge variant="outline" className="gap-1 self-start">
-          <Sparkles className="h-3 w-3" />
-          Live Feed
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="gap-1">
+            <Sparkles className="h-3 w-3" />
+            {userProjects.length > 0 ? 'Smart Feed' : 'Live Feed'}
+          </Badge>
+          <Sheet open={isBookmarksOpen} onOpenChange={setIsBookmarksOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Bookmark className="h-4 w-4" />
+                <span className="hidden sm:inline">Bookmarks</span>
+                {bookmarks.length > 0 && <Badge variant="secondary" className="ml-1">{bookmarks.length}</Badge>}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Bookmark className="h-5 w-5" />
+                  Saved Discoveries
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 space-y-4">
+                {bookmarks.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Bookmark className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <p>No bookmarks yet</p>
+                    <p className="text-sm mt-2">Click the bookmark icon on any discovery to save it</p>
+                  </div>
+                ) : (
+                  bookmarks.map((item) => (
+                    <Card key={item.id} className="border-border hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-base line-clamp-2">{item.title}</CardTitle>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => handleBookmark(item)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <CardDescription className="line-clamp-2">
+                          {item.description}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="text-xs">
+                            {item.category}
+                          </Badge>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleAddToPath(item)}
+                            >
+                              <BookmarkPlus className="h-4 w-4 mr-1" />
+                              Add to Path
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              asChild
+                            >
+                              <a href={item.url} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* AI-Powered Search */}
@@ -139,22 +430,26 @@ const Discover = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-        <TabsList className="bg-muted grid grid-cols-4 sm:grid-cols-5 w-full h-10 sm:h-11">
+        <TabsList className="bg-muted grid grid-cols-5 sm:grid-cols-6 w-full h-10 sm:h-11">
+          <TabsTrigger value="next-skills" className="text-xs sm:text-sm">
+            <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Next Skills</span>
+          </TabsTrigger>
           <TabsTrigger value="trending" className="text-xs sm:text-sm">
             <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
             <span className="hidden sm:inline">Trending</span>
           </TabsTrigger>
-          <TabsTrigger value="AI" className="text-xs sm:text-sm">
-            <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="hidden sm:inline">AI & ML</span>
-          </TabsTrigger>
-          <TabsTrigger value="Web Dev" className="text-xs sm:text-sm">
+          <TabsTrigger value="tools" className="text-xs sm:text-sm">
             <Wrench className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Web Dev</span>
+            <span className="hidden sm:inline">Tools</span>
           </TabsTrigger>
-          <TabsTrigger value="Tech" className="text-xs sm:text-sm">
-            <BookOpen className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Tech</span>
+          <TabsTrigger value="quick-wins" className="text-xs sm:text-sm">
+            <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Quick Wins</span>
+          </TabsTrigger>
+          <TabsTrigger value="success" className="text-xs sm:text-sm">
+            <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Success</span>
           </TabsTrigger>
           {exaQuery && (
             <TabsTrigger value="search">
@@ -164,48 +459,93 @@ const Discover = () => {
           )}
         </TabsList>
 
-        {/* RSS Feed Content */}
-        {['trending', 'AI', 'Web Dev', 'Tech'].map((tab) => (
+        {/* Smart Category Content */}
+        {['next-skills', 'trending', 'tools', 'quick-wins', 'success'].map((tab) => (
           <TabsContent key={tab} value={tab} className="space-y-3 sm:space-y-4">
             {feedLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-                {feedData?.items?.map((item) => (
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Card key={i} className="border-border animate-pulse">
+                    <CardHeader className="p-4 sm:p-6 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="h-5 w-20 bg-muted rounded"></div>
+                        <div className="h-4 w-16 bg-muted rounded"></div>
+                      </div>
+                      <div className="h-6 bg-muted rounded w-3/4"></div>
+                      <div className="space-y-2">
+                        <div className="h-4 bg-muted rounded"></div>
+                        <div className="h-4 bg-muted rounded w-5/6"></div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-between gap-2 p-4 sm:p-6 pt-0">
+                      <div className="h-4 w-24 bg-muted rounded"></div>
+                      <div className="flex gap-2">
+                        <div className="h-8 w-16 bg-muted rounded"></div>
+                        <div className="h-8 w-20 bg-muted rounded"></div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : feedData?.items && feedData.items.length > 0 ? (
+              <div className={`grid gap-3 sm:gap-4 sm:grid-cols-2 transition-opacity duration-300 ${isRefreshing ? 'opacity-0' : 'opacity-100'}`}>
+                {feedData.items.map((item) => (
                   <Card key={item.id} className="border-border hover:shadow-md transition-shadow">
                     <CardHeader className="p-4 sm:p-6">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
                         <Badge className={getCategoryBadge(item.category)}>
                           {item.category}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(item.published_at)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(item.published_at)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleBookmark(item)}
+                          >
+                            {isBookmarked(item.id) ? (
+                              <Bookmark className="h-4 w-4 fill-current text-primary" />
+                            ) : (
+                              <Bookmark className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                       <CardTitle className="text-lg line-clamp-2">{item.title}</CardTitle>
                       <CardDescription className="line-clamp-2">
                         {item.description}
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="flex items-center justify-between">
+                    <CardContent className="flex items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground">{item.source}</span>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => window.open(item.url, '_blank')}
-                      >
-                        Read <ExternalLink className="h-3 w-3 ml-1" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleAddToPath(item)}
+                        >
+                          <BookmarkPlus className="h-3 w-3 mr-1" />
+                          Add
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => window.open(item.url, '_blank')}
+                        >
+                          Read <ExternalLink className="h-3 w-3 ml-1" />
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
-            )}
-            {!feedLoading && (!feedData?.items || feedData.items.length === 0) && (
-              <div className="text-center py-12 text-muted-foreground">
-                No articles found. Try another category.
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading fresh content...</p>
               </div>
             )}
           </TabsContent>
@@ -240,9 +580,31 @@ const Discover = () => {
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         </div>
-                        <Badge variant="secondary">
-                          Score: {Math.round(result.score * 100)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">
+                            Score: {Math.round(result.score * 100)}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleBookmark({
+                              id: result.id,
+                              title: result.title,
+                              description: result.text || result.summary || '',
+                              url: result.url,
+                              source: new URL(result.url).hostname.replace('www.', ''),
+                              category: 'Search Result',
+                              published_at: result.publishedDate || new Date().toISOString()
+                            })}
+                          >
+                            {isBookmarked(result.id) ? (
+                              <Bookmark className="h-4 w-4 fill-current text-primary" />
+                            ) : (
+                              <Bookmark className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -276,6 +638,16 @@ const Discover = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Floating Refresh Button */}
+      <Button
+        onClick={handleRefresh}
+        disabled={feedLoading || activeTab === 'search' || isRefreshing}
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all z-50"
+        size="icon"
+      >
+        <RefreshCw className={`h-5 w-5 ${(feedLoading || isRefreshing) ? 'animate-spin' : ''}`} />
+      </Button>
     </div>
   );
 };

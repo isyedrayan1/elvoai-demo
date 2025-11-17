@@ -382,7 +382,7 @@ const AskMindCoach = () => {
           // CONSULTATIVE MODE - Need more info
           const systemMessage = {
             role: "system",
-            content: `You are MindCoach, an expert learning consultant. The user wants to learn something new.
+            content: `You are ELVO AI, an expert learning consultant. The user wants to learn something new.
 
 **DYNAMIC CONSULTATION MODE:**
 Analyze what information you already know from the conversation, then ask ONLY for missing details.

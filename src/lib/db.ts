@@ -88,9 +88,9 @@ export interface UserContext {
 }
 
 class Database {
-  private readonly CHATS_KEY = "mindcoach-chats";
-  private readonly PROJECTS_KEY = "mindcoach-projects";
-  private readonly CONTEXT_KEY = "mindcoach-context";
+  private readonly CHATS_KEY = "elvo-chats";
+  private readonly PROJECTS_KEY = "elvo-projects";
+  private readonly CONTEXT_KEY = "elvo-context";
 
   // ===== GENERAL CHATS (Outside Projects) =====
   

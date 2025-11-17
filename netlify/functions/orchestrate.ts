@@ -27,7 +27,7 @@ interface OrchestrationResponse {
 /**
  * AI Orchestrator - Detects user intent and routes to appropriate workflow
  * 
- * This is the brain of MindCoach that decides:
+ * This is the brain of ELVO AI that decides:
  * - Is this casual chat or serious learning?
  * - Should we create a project?
  * - Do they need a roadmap?
@@ -88,7 +88,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
       messages: [
         {
           role: 'system',
-          content: `You are MindCoach's intent detection system. Analyze user messages and determine their learning intent.
+          content: `You are ELVO AI's intent detection system. Analyze user messages and determine their learning intent.
 
 Context awareness:
 - hasActiveProject: ${context?.hasActiveProject || false}

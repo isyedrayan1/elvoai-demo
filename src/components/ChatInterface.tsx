@@ -98,7 +98,7 @@ export function ChatInterface({
                 ) : (
                   <>
                     <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                      Welcome to MindCoach
+                      Welcome to ELVO AI
                     </h1>
                     <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-md mx-auto">
                       Your AI learning companion for deep understanding and personalized growth
