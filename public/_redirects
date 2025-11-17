@@ -1,0 +1,7 @@
+# Netlify _redirects file for SPA routing and function proxying
+
+# Redirect all requests to index.html (for React Router SPA)
+/*    /index.html   200
+
+# Proxy API/function calls to Netlify Functions
+/api/*  /.netlify/functions/:splat   200
